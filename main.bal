@@ -1,10 +1,8 @@
 import ballerina/graphql;
 import ballerina/io;
-import ballerina/os;
 import ballerinax/googleapis.sheets;
 
-configurable string token = os:getEnv("packagePAT");
-
+configurable string GITHUB_TOKEN = ?;
 configurable string CLIENT_ID = ?;
 configurable string CLIENT_SECRET = ?;
 configurable string REFRESH_TOKEN = ?;
@@ -86,7 +84,7 @@ isolated function updateSpreadSheet(QueryResponse response) returns error? {
 isolated function getReposFromGraphql(string language, string[] excludingOrgs) returns QueryResponse|error {
     graphql:Client github = check new ("https://api.github.com/graphql", {
         auth: {
-            token
+            token : GITHUB_TOKEN
         }
     });
     string filteredQuery = buildQuery(language, excludingOrgs, TOP_REPO_COUNT);
