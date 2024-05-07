@@ -27,6 +27,9 @@ The following details will be stored related to the top starred repositories :
     TOP_REPO_COUNT="<Number of Top Starred Repositories You Want to List>"
     TOP_REPO_END_COLUMN="<Column Letter Where The List Ends>"
     TOP_REPO_HEADER_CELL="<Cell Range In Which The Header Of The List Resides>"
+    CURRENT_DATE_CELL= "<Cell that Specifies the Current Date>"
+    REPO_COUNT_HISTORY_SHEET_NAME="<Worksheet Name That is Going to Store the Count with Respect to the Date>"
+    HISTORY_CELL_RANGE_INFO_CELL="<Cell to Store the Next Updating Row in Count History>
     ```
 - Please note:
     - Spreadsheet cell details that are specified in the Toml file followes a specific structure. 
