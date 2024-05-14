@@ -1,6 +1,7 @@
 import ballerina/graphql;
 import ballerina/io;
 import ballerina/time;
+import ballerinax/googleapis.sheets;
 
 configurable string GITHUB_TOKEN = ?;
 configurable string SHEET_NAME = ?;
@@ -21,6 +22,48 @@ public function main(string[] excludingOrgs) returns error? {
 }
 
 isolated function updateSpreadSheet(RepositoryInfo[] fetchedRepos) returns error? {
+    Client persistClient = check new();
+    RepositoryInsert[] insertingData = [];
+    StarsOnDateInsert[] insertingStarsData = [];
+    from var repo in fetchedRepos
+    do {
+        //Find if the repository already exists
+        RepositoryWithRelations| error repoRecord = persistClient->/repositories/[repo.id]();
+        if (repoRecord is RepositoryWithRelations) {
+            // update the repository record
+            _ = check persistClient->/starsondates.post([{  //add the new star count
+                id: time:utcNow().toString() + "-" + repo.id,
+                repositoryId: repo.id,
+                date: getTodayDate(),
+                stars: repo.stargazerCount
+            }]);
+        } else {
+            // create a new repository record
+            Repository newRepo = {  //add the new repository
+                id: repo.id,
+                organization: repo.owner,
+                name: repo.name,
+                url: repo.url
+            };
+            insertingData.push(newRepo);
+            io:println(insertingData.length().toString() + " " + insertingStarsData.length().toString());
+
+            StarsOnDate newStars = {    //add the new star count
+                id: time:utcNow().toString() + "-" + repo.id,
+                repositoryId: repo.id,
+                date: getTodayDate(),
+                stars: repo.stargazerCount
+            };
+            insertingStarsData.push(newStars);
+        }
+    };
+
+    if (insertingData.length() > 0) {   //if there are new repositories to be added
+        _ = check persistClient->/repositories.post(insertingData);
+        _ = check persistClient->/starsondates.post(insertingStarsData);
+    }
+
+
     sheets:ConnectionConfig spreadsheetConfig = {
         auth: {
             clientId: clientId,
@@ -31,88 +74,33 @@ isolated function updateSpreadSheet(RepositoryInfo[] fetchedRepos) returns error
     };
     sheets:Client spreadsheetClient = check new (spreadsheetConfig);
 
-    // // set the current date
-    // string currDate = getTodayDate();
-    // error? cellChanged = check spreadsheetClient->setCell(spreadsheetId, SHEET_NAME, 
-    //     CURRENT_DATE_CELL, "Today Stats (" +  currDate + ")"
-    // );
-    // if (cellChanged is error) {
-    //     panic error("Error occurred while updating the spreadsheet");
-    // }
+    // set the current date
+    string currDate = getTodayDate();
+    error? cellChanged;
 
-    // // set the repository count
-    // cellChanged = check spreadsheetClient->setCell(
-    //     spreadsheetId, 
-    //     SHEET_NAME, 
-    //     REPO_COUNT_CELL, 
-    //     response.data.search.repositoryCount
-    // );
-    // if (cellChanged is error) {
-    //     panic error("Error occurred while updating the spreadsheet.");
-    // }
-
-    // // update the history
-    // sheets:Cell updatingInfo = check spreadsheetClient->getCell(spreadsheetId, REPO_COUNT_HISTORY_SHEET_NAME, HISTORY_CELL_RANGE_INFO_CELL);
-    // string|decimal|int updatingRange = updatingInfo.value;
-    // if (updatingRange is string) {
-    //     sheets:Range range = check spreadsheetClient->getRange(spreadsheetId, REPO_COUNT_HISTORY_SHEET_NAME, updatingRange);
-    //     range.values = [[currDate, response.data.search.repositoryCount]];
-    //     cellChanged = check spreadsheetClient->setRange(spreadsheetId, REPO_COUNT_HISTORY_SHEET_NAME, range, "USER_ENTERED");
-    //     if (cellChanged is error) {
-    //         panic error("Error occurred while updating the spreadsheet.");
-    //     }
-    //     // update the range info for the next update
-    //     string startCell = updatingRange.substring(0, 2);
-    //     startCell = startCell[0] + (check int:fromString(startCell[1]) + 1).toString();
-    //     string endCell = updatingRange.substring(3);
-    //     endCell = endCell[0] + (check int:fromString(endCell[1]) + 1).toString();
-    //     string newRange = startCell + ":" + endCell;
-    //     cellChanged = check spreadsheetClient->setCell(spreadsheetId, REPO_COUNT_HISTORY_SHEET_NAME, HISTORY_CELL_RANGE_INFO_CELL, newRange);
-    //     if (cellChanged is error) {
-    //         panic error("Error occurred while updating the spreadsheet.");
-    //     }
-    // } else {
-    //     panic error("Illegal state!");
-    // }
-
-
-    // // set the top repositories in the spreadsheet
-    // int|error startingRow = int:fromString(TOP_REPO_START_CELL[1]);
-    // if (startingRow is error) {
-    //     panic error("Illegal state!");
-    // }
-    // int|error topRepoCount = int:fromString(TOP_REPO_COUNT);
-    // if (topRepoCount is error) {
-    //     panic error("Illegal state!");
-    // }
-    // cellChanged = check spreadsheetClient->setCell(
-    //     spreadsheetId, SHEET_NAME, TOP_REPO_HEADER_CELL, 
-    //     "Top starred " + TOP_REPO_COUNT + " repositories"
-    // );
-    // if (cellChanged is error) {
-    //     panic error("Error occurred while updating the spreadsheet");
-    // }
-
-    // string rangeStr = TOP_REPO_START_CELL + ":" + TOP_REPO_END_COLUMN + (topRepoCount + startingRow).toString();
-    // // clear the range of cells first
-    // string clearingRangeStr = TOP_REPO_START_CELL + ":" + TOP_REPO_END_COLUMN + (startingRow + 100).toString();
-    // cellChanged = check spreadsheetClient->clearRange(spreadsheetId, SHEET_NAME, clearingRangeStr);
-    // if (cellChanged is error) {
-    //     panic error("Error occurred while updating the spreadsheet");
-    // }
-
-    // sheets:Range range = check spreadsheetClient->getRange(spreadsheetId, SHEET_NAME, rangeStr);
-    // range.values = response.data.search.edges.map((edge) => [
-    //     edge.node.owner.login,  
-    //     edge.node.name, 
-    //     edge.node.url,
-    //     edge.node.stargazerCount
-    // ]);
-    // cellChanged = check spreadsheetClient->setRange(spreadsheetId, SHEET_NAME, range);
-    // if (cellChanged is error) {
-    //     panic error("Error occurred while updating the spreadsheet.");
-    // }
-
+    // update the history
+    sheets:Cell updatingInfo = check spreadsheetClient->getCell(spreadsheetId, REPO_COUNT_HISTORY_SHEET_NAME, HISTORY_CELL_RANGE_INFO_CELL);
+    string|decimal|int updatingRange = updatingInfo.value;
+    if (updatingRange is string) {
+        sheets:Range range = check spreadsheetClient->getRange(spreadsheetId, REPO_COUNT_HISTORY_SHEET_NAME, updatingRange);
+        range.values = [[currDate, fetchedRepos.length()]];
+        cellChanged = check spreadsheetClient->setRange(spreadsheetId, REPO_COUNT_HISTORY_SHEET_NAME, range, "USER_ENTERED");
+        if (cellChanged is error) {
+            panic error("Error occurred while updating the spreadsheet.");
+        }
+        // update the range info for the next update
+        string startCell = updatingRange.substring(0, 2);
+        startCell = startCell[0] + (check int:fromString(startCell[1]) + 1).toString();
+        string endCell = updatingRange.substring(3);
+        endCell = endCell[0] + (check int:fromString(endCell[1]) + 1).toString();
+        string newRange = startCell + ":" + endCell;
+        cellChanged = check spreadsheetClient->setCell(spreadsheetId, REPO_COUNT_HISTORY_SHEET_NAME, HISTORY_CELL_RANGE_INFO_CELL, newRange);
+        if (cellChanged is error) {
+            panic error("Error occurred while updating the spreadsheet.");
+        }
+    } else {
+        panic error("Illegal state!");
+    }
 }
 
 isolated function getTodayDate() returns string {
@@ -175,6 +163,7 @@ isolated function fetchRepos(string language, string[] excludingOrgs, string asc
         }
     }
     io:println("filtering repos count: " + filteringRepos.length().toString());
+    // Recursively call the function to fetch the next set of repositories
     return check fetchRepos(language, excludingOrgs, ascOrDesc, githubClient, filteringRepos, totalRepoCount);
 }
 
